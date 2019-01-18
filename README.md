@@ -9,5 +9,5 @@ This package computes the point spread function (psf) from a 3d image of beads. 
 ### install
 
 ```bash
-git clone https://github.com/sofroniewn/psf
+git clone https://github.com/mesoSPIM/mesoSPIM-PSFanalysis
 ```
