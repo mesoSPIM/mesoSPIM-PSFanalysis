@@ -30,6 +30,8 @@ def findBeads(im, window, thresh):
     '''
     Uses a 2D gaussian filter to smooth the data with a sigma of 1
     Finds peaks that are at least separated by min distance
+
+    Returns the max projection of the smoothed image
     '''
     smoothed = gaussian(im, 1, output=None, mode='nearest', cval=0, multichannel=None)
     centers = peak_local_max(smoothed, min_distance=3, threshold_rel=thresh, exclude_border=True)
@@ -38,7 +40,10 @@ def findBeads(im, window, thresh):
 def keepBeads(im, window, centers, options):
     centersM = asarray([[x[0]/options['pxPerUmAx'], x[1]/options['pxPerUmLat'], x[2]/options['pxPerUmLat']] for x in centers])
     centerDists = [nearest(x,centersM) for x in centersM]
-    keep = where([x>3 for x in centerDists])
+    ''' why is this distance hardcoded? '''
+    min_distance = min_distance = sum([x**2 for x in options['windowUm']])**(.5)
+    keep = where([x>min_distance for x in centerDists])
+    # keep = where([x>3 for x in centerDists])
     centers = centers[keep[0],:]
     keep = where([inside(im.shape, x, window) for x in centers])
     return centers[keep[0],:]
