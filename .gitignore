@@ -1,0 +1,6 @@
+
+*.tif
+
+data/Thumbs\.db
+
+psf/__pycache__/
