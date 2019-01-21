@@ -6,3 +6,5 @@ data/Thumbs\.db
 psf/__pycache__/
 
 \.ipynb_checkpoints/
+
+results/
