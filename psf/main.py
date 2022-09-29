@@ -1,9 +1,11 @@
 from numpy import all, asarray, array, where, exp
 from pandas import DataFrame
-from skimage.filters import gaussian
+from skimage.filters import gaussian, median
+from skimage.morphology import cube
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
 from scipy.stats import multivariate_normal
+from sklearn.metrics import pairwise_distances
 import matplotlib.pyplot as plt
 
 def compute(im, options):
@@ -15,37 +17,47 @@ def inside(shape, center, window):
     Returns boolean if a center and its window is fully contained
     within the shape of the image on all three axes
     """
-    return all([(center[i]-window[i] >= 0) & (center[i]+window[i] <= shape[i]) for i in range(0,3)])
+    return all([(center[i]-window[i]//2 >= 0) & (center[i] + window[i]//2 <= shape[i]) for i in range(0,3)])
 
 def volume(im, center, window):
     if inside(im.shape, center, window):
-        volume = im[(center[0]-window[0]):(center[0]+window[0]), (center[1]-window[1]):(center[1]+window[1]), (center[2]-window[2]):(center[2]+window[2])]
+        volume = im[(center[0]-window[0]//2):(center[0]+window[0]//2), 
+                    (center[1]-window[1]//2):(center[1]+window[1]//2), 
+                    (center[2]-window[2]//2):(center[2]+window[2]//2)]
         volume = volume.astype('float64')
         baseline = volume[[0,-1],[0,-1],[0,-1]].mean()
         volume = volume - baseline
         volume = volume/volume.max()
         return volume
 
-def findBeads(im, window, thresh):
+def findBeads(im, window, thresh, min_dist=1):
     '''
     Uses a 2D gaussian filter to smooth the data with a sigma of 1
     Finds peaks that are at least separated by min distance
+    Smoothing can be 'median' (slow but more accurate) or 'gaussian' (fast but more agressive).
 
     Returns the max projection of the smoothed image
     '''
-    smoothed = gaussian(im, 1, output=None, mode='nearest', cval=0, multichannel=None)
-    centers = peak_local_max(smoothed, min_distance=3, threshold_rel=thresh, exclude_border=True)
+    #smoothed = median(im, cube(3), mode='reflect') # VERY slow
+    smoothed = gaussian(im, 1, output=None, mode='nearest', truncate=1.0, preserve_range=True)
+    centers = peak_local_max(smoothed, min_distance=min_dist, threshold_abs=thresh, exclude_border=True)
+    print(f'findBeads() done: {len(centers)} found')
     return centers, smoothed.max(axis=0)
 
 def keepBeads(im, window, centers, options):
     centersM = asarray([[x[0]/options['pxPerUmAx'], x[1]/options['pxPerUmLat'], x[2]/options['pxPerUmLat']] for x in centers])
-    centerDists = [nearest(x,centersM) for x in centersM]
-    ''' why is this distance hardcoded? '''
-    min_distance = min_distance = sum([x**2 for x in options['windowUm']])**(.5)
-    keep = where([x>min_distance for x in centerDists])
-    # keep = where([x>3 for x in centerDists])
+    print('centersM done')
+    #centerDists = [nearest(x,centersM) for x in centersM] # super-slow step! Modified, see below
+    distance_matrix = pairwise_distances(centersM)
+    distance_matrix.sort()
+    centerDists = distance_matrix[:,1]
+    print('centerDists done')
+    #min_distance = sum([x**2 for x in options['windowUm']])**(.5)
+    min_distance = float(min(options['windowUm']))
+    keep = where([x > min_distance for x in centerDists])
     centers = centers[keep[0],:]
     keep = where([inside(im.shape, x, window) for x in centers])
+    print(f'keepBeads() done: {len(keep[0])} found')
     return centers[keep[0],:]
 
 def getCenters(im, options):
@@ -55,6 +67,7 @@ def getCenters(im, options):
     centers = keepBeads(im, window, centers, options)
     beads = [volume(im, x, window) for x in centers]
     maxima = [im[x[0], x[1], x[2]] for x in centers]
+    print(f'getCenters() done: {len(centers)} found')
     return beads, maxima, centers, smoothed
 
 def getPSF(bead, options):
