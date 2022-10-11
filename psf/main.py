@@ -86,9 +86,12 @@ def fit(yRaw,scale):
     y = yRaw - (yRaw[0]+yRaw[-1])/2
     x = (array(range(y.shape[0])) - y.shape[0]/2)
     x = (array(range(y.shape[0])) - y.shape[0]/2)
-    popt, pcov = curve_fit(gauss, x, y, p0 = [1, 0, 1, 0])
-    FWHM = 2.355*popt[2]/scale
-    yFit = gauss(x, *popt)
+    try:
+        popt, pcov = curve_fit(gauss, x, y, p0 = [1, 0, 1, 0])
+        FWHM = 2.355*popt[2]/scale
+        yFit = gauss(x, *popt)
+    except:
+        yFit, FWHM = None, None
     return x, y, yFit, FWHM
 
 def plotPSF(x,y,yFit,FWHM,scale,Max):
