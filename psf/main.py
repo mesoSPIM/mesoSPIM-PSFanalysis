@@ -48,17 +48,23 @@ def keepBeads(im, window, centers, options):
     centersM = asarray([[x[0]/options['pxPerUmAx'], x[1]/options['pxPerUmLat'], x[2]/options['pxPerUmLat']] for x in centers])
     print('centersM done')
     #centerDists = [nearest(x,centersM) for x in centersM] # super-slow step! Modified, see below
-    distance_matrix = pairwise_distances(centersM)
-    distance_matrix.sort()
-    centerDists = distance_matrix[:,1]
-    print('centerDists done')
-    #min_distance = sum([x**2 for x in options['windowUm']])**(.5)
-    min_distance = float(min(options['windowUm']))
-    keep = where([x > min_distance for x in centerDists])
-    centers = centers[keep[0],:]
-    keep = where([inside(im.shape, x, window) for x in centers])
-    print(f'keepBeads() done: {len(keep[0])} found')
-    return centers[keep[0],:]
+    if len(centersM) == 1:
+        centers_keep = centers
+    elif len(centersM) >= 2:
+        distance_matrix = pairwise_distances(centersM)
+        distance_matrix.sort()
+        centerDists = distance_matrix[:,1]
+        print('centerDists done')
+        #min_distance = sum([x**2 for x in options['windowUm']])**(.5)
+        min_distance = float(min(options['windowUm']))
+        keep = where([x > min_distance for x in centerDists])
+        centers = centers[keep[0],:]
+        keep = where([inside(im.shape, x, window) for x in centers])
+        print(f'keepBeads() done: {len(keep[0])} found')
+        centers_keep = centers[keep[0],:]
+    else:
+        centers_keep = None
+    return centers_keep
 
 def getCenters(im, options):
     window = [options['windowUm'][0]*options['pxPerUmAx'], options['windowUm'][1]*options['pxPerUmLat'], options['windowUm'][2]*options['pxPerUmLat']]
@@ -77,9 +83,15 @@ def getPSF(bead, options):
     data = DataFrame([latFit[3], axFit[3]],index = ['FWHMlat', 'FWHMax']).T
     return data, latFit, axFit
 
-def getSlices(average):
-    latProfile = (average.mean(axis=0).mean(axis=1) + average.mean(axis=0).mean(axis=1))/2
-    axProfile = (average.mean(axis=1).mean(axis=1) + average.mean(axis=2).mean(axis=1))/2
+def getSlices(average, method='local_peak'):
+    if method == 'max': # old, incorrect way to get profile along axis. Sum of intensities should be 0 for PSF (except multiphoton case).
+        latProfile = (average.mean(axis=0).mean(axis=1) + average.mean(axis=0).mean(axis=1))/2  
+        axProfile = (average.mean(axis=1).mean(axis=1) + average.mean(axis=2).mean(axis=1))/2 
+    else:
+        # slice at the peak value
+        center = peak_local_max(average, min_distance=2, threshold_abs=0.99)[0]
+        latProfile = (average[center[0], :, center[2]] + average[center[0], center[1], :])/2
+        axProfile = average[:, center[1], center[2]]
     return latProfile, axProfile
 
 def fit(yRaw,scale):
@@ -88,7 +100,7 @@ def fit(yRaw,scale):
     x = (array(range(y.shape[0])) - y.shape[0]/2)
     try:
         popt, pcov = curve_fit(gauss, x, y, p0 = [1, 0, 1, 0])
-        FWHM = 2.355*popt[2]/scale
+        FWHM = 2.3548*popt[2]/scale
         yFit = gauss(x, *popt)
     except:
         yFit, FWHM = None, None
