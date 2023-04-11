@@ -78,8 +78,14 @@ def getCenters(im, options):
 
 def getPSF(bead, options):
     latProfile, axProfile = getSlices(bead)
-    latFit = fit(latProfile,options['pxPerUmLat'])
-    axFit = fit(axProfile,options['pxPerUmAx'])
+    if latProfile is not None:
+        latFit = fit(latProfile,options['pxPerUmLat'])
+    else:
+        latFit = (None, None, None, None)
+    if axProfile is not None:
+        axFit = fit(axProfile,options['pxPerUmAx'])
+    else:
+        axFit = (None, None, None, None)
     data = DataFrame([latFit[3], axFit[3]],index = ['FWHMlat', 'FWHMax']).T
     return data, latFit, axFit
 
@@ -89,9 +95,13 @@ def getSlices(average, method='local_peak'):
         axProfile = (average.mean(axis=1).mean(axis=1) + average.mean(axis=2).mean(axis=1))/2 
     else:
         # slice at the peak value
-        center = peak_local_max(average, min_distance=2, threshold_abs=0.99)[0]
-        latProfile = (average[center[0], :, center[2]] + average[center[0], center[1], :])/2
-        axProfile = average[:, center[1], center[2]]
+        center = peak_local_max(average, min_distance=2, threshold_abs=0.99, exclude_border=True, num_peaks=1)
+        if len(center) > 0:
+            center = center[0]
+            latProfile = (average[center[0], :, center[2]] + average[center[0], center[1], :])/2
+            axProfile = average[:, center[1], center[2]]
+        else:
+            latProfile, axProfile = None, None
     return latProfile, axProfile
 
 def fit(yRaw,scale):
